@@ -1,0 +1,26 @@
+{
+  "name": "luojiafox-rm-command-v2-1",
+  "private": true,
+  "version": "2.1.0",
+  "type": "module",
+  "scripts": {
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:api": "wrangler dev --local",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply rm-command-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply rm-command-db --remote",
+    "db:backup": "wrangler d1 export rm-command-db --remote --output=backup.sql",
+    "check": "node --check worker/index.js && node --check worker/access-jwt.js && node --check src/api.js && node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "lucide-vue-next": "^0.468.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "vite": "^6.1.0",
+    "wrangler": "^4.0.0"
+  }
+}

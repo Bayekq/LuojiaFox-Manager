@@ -1,0 +1,3 @@
+# ONLY for development on localhost; NEVER deploy DEV_AUTH_EMAIL as a Worker secret.
+DEV_AUTH_EMAIL=admin@whu.edu.cn
+BOOTSTRAP_ADMIN_EMAIL=admin@whu.edu.cn
