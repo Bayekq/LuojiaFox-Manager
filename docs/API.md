@@ -8,7 +8,7 @@
 |---|---|---|---|
 | GET | `/api/health` | 公开 | 服务版本（无用户数据） |
 | GET | `/api/me` | 注册队员 | Access 身份映射 D1 用户；首位管理员按 Secret 引导 |
-| GET | `/api/state` | 注册队员 | 8 个兵种、任务、节点、风险、采购、成员、最近审计等 |
+| GET | `/api/state` | 注册队员 | 7 个兵种、任务、节点、风险、采购、成员、最近审计等 |
 | POST | `/api/tasks` | 管理员 / 所属兵种负责人 / 所属兵种成员 | 创建任务，普通成员只能将负责人设为自己 |
 | PATCH | `/api/tasks/:id` | 管理员 / 对应负责人 / 任务本人 | 修改任务，必须传 `version` |
 | DELETE | `/api/tasks/:id` | 管理员 / 对应负责人 | 删除任务，必须传 `version` |
@@ -66,7 +66,7 @@ WHERE id=? AND version=5;
 
 ```text
 users (Access email -> role, unit_ids, version)
-units (8 ids, lead_id -> users.id, budget, version)
+units (7 ids, lead_id -> users.id, budget, version)
 tasks (unit_id -> units.id, owner_id -> users.id, version)
 milestones (unit_id -> units.id, version)
 risks (unit_id -> units.id, owner_id -> users.id, version)

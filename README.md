@@ -2,8 +2,8 @@
 
 将原 V2.0 浏览器本地项目管理页改为 **Vue 3 + Vite + Cloudflare Workers + D1 + Cloudflare Access** 的全队在线协作工程。
 
-- **战队首页**：八兵种研发矩阵、任务完成度、采购预算、交付节点与风险汇总。
-- **兵种工作区**：英雄、工程、步兵 3、步兵 4、空中、哨兵、飞镖、雷达，各自拥有综合概览 / 任务看板 / 研发节点 / 风险 / 采购 / 人员分工。
+- **战队首页**：七兵种研发矩阵、任务完成度、采购预算、交付节点与风险汇总。
+- **兵种工作区**：重装、步兵 3、步兵 4、空中、哨兵、飞镖、雷达，各自拥有综合概览 / 任务看板 / 研发节点 / 风险 / 采购 / 人员分工。
 - **云端存储**：所有成员操作共享 D1 数据，而非各自浏览器的 localStorage。
 - **账户**：Cloudflare Access 邮箱登录，Worker 使用 Access 公钥验签 JWT（支持 Static Assets 路由），D1 白名单成员管理；战队管理员、兵种负责人、成员、只读角色。
 - **乐观锁**：任务、里程碑、风险、采购、兵种资料、成员、工作区设置全部带 `version`，更新和删除时进行 SQL 原子校验；冲突返回 HTTP 409 及服务器最新记录。
@@ -54,7 +54,8 @@ src/constants.js          兵种视图/任务状态枚举与工具函数
 src/style.css             深色研发指挥台响应式样式
 worker/index.js           Worker API、服务端 RBAC、乐观锁
 worker/access-jwt.js      Cloudflare Access JWT 公钥验签（Static Assets 必需）
-migrations/0001_initial.sql   D1 SQLite 建库与八兵种初始化
+migrations/0001_initial.sql   D1 SQLite 原始建库
+migrations/0002_heavy_units.sql  合并英雄、工程为重装，保留业务记录与成员归属
 wrangler.jsonc            资源绑定、Worker 静态资源部署配置
 public/_headers           静态资源安全响应头
 .dev.vars.example         本地身份模拟与管理员 bootstrap 示例
@@ -79,3 +80,9 @@ npm run check
 本版不包含 R2 图纸/PDF 文件上传、GitHub Webhook、实时 WebSocket/在线用户存在检测，也没有试图为战队自动创建真实任务或人员。以上功能适合 V2.2。
 
 空白数据库的任务和预算默认为 0。请不要把演示版 V2.0 自带的数据当作战队真实研发进度。
+
+## 本次更新
+
+英雄与工程合并为重装机器人。已有数据库需先执行 `npm run db:migrate:local`（线上使用 `npm run db:migrate:remote`），再构建部署。迁移合计两个工作区预算，保留研发说明和目标，转移全部任务、节点、风险、采购和成员归属；重装主要负责人优先沿用原英雄负责人，另一负责人保留重装成员归属，可在网页调整。
+
+管理员可在“战队成员”或兵种“人员分工”中点击“添加管理员”或“添加成员”，填写姓名、邮箱并选择角色、所属兵种。新增账号仍使用 Cloudflare Access 邮箱登录，请将邮箱加入 Access 允许名单。

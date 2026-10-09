@@ -87,7 +87,7 @@ npm run dev:web
 npm run db:migrate:remote
 ```
 
-这是直接操作生产 D1，会执行 `migrations/0001_initial.sql` 创建业务表并初始化 8 个兵种。新库中不会自动填入示例任务、预算或虚构队员。
+这是直接操作生产 D1，会执行 `migrations/0001_initial.sql` 创建业务表，并通过 `0002_heavy_units.sql` 合并英雄、工程为重装，最终包含 7 个兵种。新库中不会自动填入示例任务、预算或虚构队员。
 
 可以检查：
 
@@ -95,7 +95,7 @@ npm run db:migrate:remote
 npx wrangler d1 execute rm-command-db --remote --command "SELECT id,name,version FROM units ORDER BY code;"
 ```
 
-应返回 8 个兵种。
+应返回 7 个兵种。
 
 ## 5. 部署到测试 Worker
 
@@ -151,8 +151,8 @@ npx wrangler secret put BOOTSTRAP_ADMIN_EMAIL
 ## 8. 邀请成员和分配权限
 
 1. 在 Cloudflare Access 策略增加成员邮箱；只有通过 Access 验证的成员才能访问 Worker。
-2. 用管理员账户打开战队网站 → 战队成员 → 添加战队成员。
-3. 填写邮箱（要与 Access 用户邮箱一致）、姓名、`leader / member / viewer`，勾选所属兵种。
+2. 用管理员账户打开战队网站 → 战队成员 → 添加管理员 / 添加成员。
+3. 填写邮箱（要与 Access 用户邮箱一致）、姓名、`admin / leader / member / viewer`，勾选所属兵种。
 4. 新成员使用相同邮箱登录，即可看到战队数据，并按角色获得对应写权限。
 
 普通成员只能编辑**自己负责**的、自己所属兵种的任务；负责人可以编辑自己管理兵种的任务、采购与风险；管理员拥有全站管理权限。

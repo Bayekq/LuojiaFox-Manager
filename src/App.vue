@@ -151,7 +151,7 @@ function newForm(kind) {
   if (kind === 'milestones') return { unit_id: u, title: '', description: '', subsystem: '', due_date: '', done: false }
   if (kind === 'risks') return { unit_id: u, title: '', description: '', level: 'medium', status: 'open', owner_id: null }
   if (kind === 'purchases') return { unit_id: u, name: '', description: '', subsystem: '', quantity: 1, unit_price: 0, status: 'planned', owner_id: null }
-  if (kind === 'user') return { email: '', name: '', role: 'member', unit_ids: [], disabled: false }
+  if (kind === 'user') return { email: '', name: '', role: 'member', unit_ids: selectedUnit.value ? [selectedUnit.value] : [], disabled: false }
   if (kind === 'settings') return { ...data.value.settings }
   if (kind === 'unit') return { ...currentUnit.value }
   return {}
@@ -166,6 +166,10 @@ function openEditor(kind, row = null) {
   conflict.value = null
 }
 function closeEditor() { editingKind.value = ''; editing.value = null; editingId.value = ''; conflict.value = null; modalReadonly.value = false; form.value = {} }
+function openUserEditor(role) {
+  openEditor('user')
+  if (editingKind.value === 'user') form.value.role = role
+}
 function selectableUsers(unitId) { return data.value.users.filter(u => !u.disabled && (u.role === 'admin' || u.unit_ids.includes(unitId))) }
 async function submitForm() {
   if (!editingKind.value || modalReadonly.value) return
@@ -303,7 +307,7 @@ onUnmounted(() => {
 
 <template>
   <div v-if="booting" class="boot-screen">
-    <div class="brand-big"><span class="fox-mark">狐</span><div><strong>珞珈狐</strong><span>RM COMMAND · V2.1</span></div></div>
+    <div class="brand-big"><img class="team-logo boot-logo" src="/team-logo.png" alt="珞珈狐战队队标" width="64" height="80"/><div><strong>珞珈狐</strong><span>精于毫厘，胜于瞬息。</span></div></div>
     <div class="boot-loading"><RefreshCw :size="17" class="spin" /> 正在连接战队云端工作区…</div>
   </div>
   <div v-else-if="accessError" class="access-screen">
@@ -320,7 +324,7 @@ onUnmounted(() => {
   <div v-else class="shell">
     <div v-if="mobileNav" class="mobile-scrim" @click="mobileNav=false"></div>
     <aside class="sidebar" :class="{show:mobileNav}">
-      <div class="brand"><span class="brand-icon"><Target :size="26" :stroke-width="1.8" /></span><span><b>珞珈狐</b><small>LUOJIA FOX · RM</small></span><button class="mobile-close icon-button" @click="mobileNav=false"><X :size="19"/></button></div>
+      <div class="brand"><img class="team-logo sidebar-logo" src="/team-logo.png" alt="珞珈狐战队队标" width="48" height="60"/><span class="brand-copy"><b>珞珈狐</b><small>LUOJIA FOX · RM</small></span><button class="mobile-close icon-button" @click="mobileNav=false"><X :size="19"/></button></div>
       <div class="workspace"><span class="tiny-caps">CURRENT WORKSPACE</span><strong>{{ data.settings?.team_name || '武汉大学 · 珞珈狐战队' }}</strong><small>{{ data.settings?.season || 'RM 2027' }} · 战队研发平台</small></div>
       <div class="sidebar-scroll">
         <div class="nav-heading"><span>战队管理</span><span>TEAM</span></div>
@@ -363,12 +367,12 @@ onUnmounted(() => {
 
         <template v-if="view==='overview'">
           <div v-if="!selectedUnit" class="hero-panel">
-            <div><div class="hero-eyebrow"><span class="live-dot"></span> {{ data.settings?.season }} · COMMAND CENTER</div><h2>珞珈狐战队 <em>研发指挥台</em></h2><p>8 大兵种工作区独立推进，全队任务与采购实时汇总。统一责任人、交付节点和风险跟踪，让每一次联调都有迹可循。</p><div class="hero-facts"><span><Layers3 :size="14"/> {{ data.units.length }} 个兵种单元</span><span><ClipboardList :size="14"/> {{ data.tasks.length }} 项研发任务</span><span><Users :size="14"/> {{ data.users.filter(u=>!u.disabled).length }} 位成员</span></div></div>
+            <div><div class="hero-eyebrow"><span class="live-dot"></span> {{ data.settings?.season }} · COMMAND CENTER</div><h2>珞珈狐战队 <em>研发指挥台</em></h2><p class="team-motto">精于毫厘，胜于瞬息。</p><p>{{ data.units.length }} 大兵种工作区独立推进，全队任务与采购实时汇总。统一责任人、交付节点和风险跟踪，让每一次联调都有迹可循。</p><div class="hero-facts"><span><Layers3 :size="14"/> {{ data.units.length }} 个兵种单元</span><span><ClipboardList :size="14"/> {{ data.tasks.length }} 项研发任务</span><span><Users :size="14"/> {{ data.users.filter(u=>!u.disabled).length }} 位成员</span></div></div>
             <div class="circle-meter" :style="{'--progress':totalTasks.progress}"><div><small>MISSION PROGRESS</small><strong>{{ totalTasks.progress }}<i>%</i></strong><span>全队任务完成率</span></div></div>
           </div>
           <div class="stat-grid"><div class="stat-card"><div class="stat-top"><span>已完成 / 总任务</span><span class="stat-icon green"><CheckCircle2 :size="18"/></span></div><strong>{{ getRows('tasks').filter(x=>x.status==='done').length }}<small> / {{ getRows('tasks').length }}</small></strong><p>已交付研发任务</p></div><div class="stat-card"><div class="stat-top"><span>正在推进</span><span class="stat-icon blue"><Activity :size="18"/></span></div><strong>{{ getRows('tasks').filter(x=>['doing','review'].includes(x.status)).length }}</strong><p>进行中 + 待验证</p></div><div class="stat-card"><div class="stat-top"><span>未解决风险</span><span class="stat-icon red"><AlertTriangle :size="18"/></span></div><strong>{{ risksOpen().length }}</strong><p>需要优先排查的事项</p></div><div class="stat-card"><div class="stat-top"><span>采购计划占用</span><span class="stat-icon orange"><Wallet :size="18"/></span></div><strong class="currency-stat">{{ money(purchaseSum()) }}</strong><p>预算 {{ money(selectedUnit ? currentUnit?.budget : data.settings?.team_budget) }}</p></div></div>
           <template v-if="!selectedUnit">
-            <div class="section-head"><div><div class="eyebrow">ROBOT LINEUP / 兵种矩阵</div><h2>八大兵种工作区</h2><p>选择对应兵种，进入独立任务、节点、风险、采购和成员管理页面。</p></div><small>8 UNITS · {{ data.settings?.season }}</small></div>
+            <div class="section-head"><div><div class="eyebrow">ROBOT LINEUP / 兵种矩阵</div><h2>兵种工作区</h2><p>选择对应兵种，进入独立任务、节点、风险、采购和成员管理页面。</p></div><small>{{ data.units.length }} UNITS · {{ data.settings?.season }}</small></div>
             <div class="unit-grid"><button v-for="unit in data.units" :key="unit.id" class="unit-card" :style="{'--uc':unit.color}" @click="go(`unit/${unit.id}/overview`)"><div class="unit-card-head"><div class="u-title"><span class="unit-card-code">{{ unit.code }} <Target :size="15"/></span><span><small>ROBOT WORKSPACE</small><b>{{ unit.name }}</b></span></div><ArrowUpRight :size="17"/></div><div class="unit-card-progress"><span>研发任务完成度</span><strong>{{ taskCount(unit.id).progress }}%</strong></div><div class="track"><span :style="{width:taskCount(unit.id).progress+'%', background:unit.color}"></span></div><div class="unit-card-bottom"><span>{{ taskCount(unit.id).done }} / {{ taskCount(unit.id).all }} 项交付</span><span>{{ taskCount(unit.id).doing }} 正在推进</span><span>{{ risksOpen(unit.id).length }} 项风险</span></div><div class="unit-card-last"><span>{{ unit.stage }}</span><span>预算 {{ money(unit.budget) }}</span></div></button></div>
           </template>
           <div class="two-grid overview-lower"><section class="panel"><div class="panel-title"><div><h3>{{ selectedUnit ? '当前重点工作' : '战队任务状态' }}</h3><p>按交付状态汇总任务进展</p></div><button class="link-button" @click="go(selectedUnit ? `unit/${selectedUnit}/tasks`:'tasks')">查看看板 <ArrowRight :size="14"/></button></div><div class="distribution"><span v-for="s in STATUS" :key="s.value" :style="{width:pct(getRows('tasks').filter(t=>t.status===s.value).length,getRows('tasks').length)+'%',background:s.color}"></span></div><div class="legend"><span v-for="s in STATUS" :key="s.value"><i :style="{background:s.color}"></i>{{ s.label }} <b>{{ getRows('tasks').filter(t=>t.status===s.value).length }}</b></span></div><div class="separator"></div><div class="panel-title"><div><h3>近期交付节点</h3><p>按预计交付时间排序</p></div><button class="link-button" @click="go(selectedUnit ? `unit/${selectedUnit}/milestones`:'milestones')">全部节点 <ArrowRight :size="14"/></button></div><div v-if="getRows('milestones').filter(x=>!x.done).length===0" class="empty-state"><Flag :size="28"/><b>暂无待交付节点</b><span>可在里程碑页面创建研发验收节点</span></div><button v-for="item in getRows('milestones').filter(x=>!x.done).slice().sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999')).slice(0,5)" :key="item.id" class="list-line" @click="openEditor('milestones',item)"><span class="date-square">{{ dateLabel(item.due_date) }}</span><span><b>{{ item.title }}</b><small>{{ unitName(item.unit_id) }} · {{ item.subsystem || '系统联调' }}</small></span><ChevronRight :size="16"/></button></section><div class="stack"><section class="panel"><div class="panel-title"><div><h3>本期重点任务</h3><p>优先级与截止时间排序</p></div><button class="link-button" @click="go(selectedUnit ? `unit/${selectedUnit}/tasks`:'tasks')">查看全部 <ArrowRight :size="14"/></button></div><div v-if="!activeTasks.filter(t=>!selectedUnit||t.unit_id===selectedUnit).length" class="empty-state"><ListTodo :size="25"/><b>暂无未完成任务</b></div><button v-for="task in activeTasks.filter(t=>!selectedUnit||t.unit_id===selectedUnit).slice(0,6)" :key="task.id" class="list-line" @click="openEditor('tasks',task)"><i class="priority-dot" :class="task.priority"></i><span><b>{{ task.title }}</b><small>{{ unitName(task.unit_id) }} · {{ userName(task.owner_id,task.owner_label) }}</small></span><small :class="taskDueClass(task)">{{ timeHint(task.due_date) }}</small></button></section><section class="panel"><div class="panel-title"><div><h3>风险关注</h3><p>优先处理尚未关闭的问题</p></div><button class="link-button" @click="go(selectedUnit ? `unit/${selectedUnit}/risks`:'risks')">风险台账 <ArrowRight :size="14"/></button></div><div v-if="!risksOpen(selectedUnit).length" class="empty-state"><ShieldCheck :size="26"/><b>暂无未关闭风险</b></div><button v-for="r in risksOpen(selectedUnit).slice(0,4)" :key="r.id" class="list-line" @click="openEditor('risks',r)"><AlertTriangle :size="16" class="risk-text"/><span><b>{{ r.title }}</b><small>{{ unitName(r.unit_id) }} · {{ RISK_LEVEL.find(x=>x.value===r.level)?.label }}</small></span><ChevronRight :size="15"/></button></section></div></div>
@@ -388,9 +392,9 @@ onUnmounted(() => {
         </template>
 
         <template v-else-if="view==='people'">
-          <div class="tool-row"><div class="inline-note"><ShieldCheck :size="16"/> 权限由 Worker API 校验，不依赖前端隐藏按钮</div><button v-if="isAdmin" class="button primary" @click="openEditor('user')"><Plus :size="16"/> 添加战队成员</button></div>
+          <div class="tool-row"><div class="inline-note"><ShieldCheck :size="16"/> {{ isAdmin ? '填写姓名、登录邮箱和角色，即可添加战队账号' : '请联系战队管理员添加账号或调整权限' }}</div><div v-if="isAdmin" class="people-actions"><button class="button subtle" @click="openUserEditor('admin')"><ShieldCheck :size="16"/> 添加管理员</button><button class="button primary" @click="openUserEditor('member')"><Plus :size="16"/> 添加成员</button></div></div>
+          <div v-if="!scopedPeople.length" class="empty-state"><Users :size="28"/><b>暂无成员</b><span>{{ isAdmin ? '点击添加成员，设置姓名、邮箱和所属兵种' : '请联系战队管理员分配成员' }}</span></div>
           <div class="members-grid"><div v-for="person in scopedPeople" :key="person.id" class="member-card"><div class="member-head"><span class="member-avatar">{{ person.name.slice(0,1) }}</span><div><strong>{{ person.name }}</strong><small>{{ roleLabel(person.role) }}</small></div><button v-if="isAdmin" class="small-icon" @click="openEditor('user',person)"><Edit3 :size="16"/></button></div><p>{{ person.email }}</p><div class="member-tags"><span v-for="id in person.unit_ids" :key="id" class="mini-unit">{{ unitName(id) }}</span><span v-if="!person.unit_ids.length" class="soft-tag">未分配兵种</span><span v-if="person.disabled" class="state-pill danger">已停用</span></div></div></div>
-          <div v-if="!scopedPeople.length" class="empty-state panel"><Users :size="27"/><b>暂无所属成员</b><span>管理员可以创建成员，分配兵种与访问角色</span></div>
           <div v-if="!selectedUnit" class="panel info-panel"><h3>角色与权限说明</h3><p><b>战队管理员：</b>全站读写、成员授权与预算编辑；<b>兵种负责人：</b>所负责兵种的任务和研发记录管理；<b>普通成员：</b>为自己创建和编辑所属兵种任务；<b>只读成员：</b>查看全部内容但不能修改。Cloudflare Access 允许名单与本站用户名单需要分别配置。</p></div>
         </template>
 
@@ -401,7 +405,7 @@ onUnmounted(() => {
     </div>
 
     <div v-if="editingKind" class="dialog-backdrop" @click.self="closeEditor">
-      <div class="dialog" role="dialog" aria-modal="true" :aria-label="`编辑${LABELS[editingKind]||''}`"><div class="dialog-heading"><div><div class="eyebrow">RM COMMAND / EDITOR</div><h2>{{ modalReadonly ? '查看' : editingId ? '编辑' : '新建' }}{{ LABELS[editingKind] }}</h2><small v-if="editingId">版本 v{{ form.version }} · 保存时进行乐观锁校验</small></div><button class="icon-button" aria-label="关闭编辑" @click="closeEditor"><X :size="21"/></button></div>
+      <div class="dialog" role="dialog" aria-modal="true" :aria-label="`编辑${LABELS[editingKind]||''}`"><div class="dialog-heading"><div><div class="eyebrow">RM COMMAND / EDITOR</div><h2>{{ modalReadonly ? '查看' : editingId ? '编辑' : '新建' }}{{ editingKind === 'user' ? (form.role === 'admin' ? '管理员' : '成员') : LABELS[editingKind] }}</h2><small v-if="editingId">版本 v{{ form.version }} · 保存时进行乐观锁校验</small></div><button class="icon-button" aria-label="关闭编辑" @click="closeEditor"><X :size="21"/></button></div>
         <div v-if="conflict" class="conflict-box"><div class="conflict-title"><AlertTriangle :size="19"/> 数据版本冲突（HTTP 409）</div><p>其他队员已经修改了这条记录，服务器当前版本为 <b>v{{ conflict.current.version }}</b>，你的草稿版本为 <b>v{{ conflict.draft.version }}</b>。不会自动覆盖任何一方数据。</p><div class="conflict-compare"><div><strong>服务器当前数据</strong><pre>{{ JSON.stringify(conflict.current,null,2) }}</pre></div><div><strong>你的编辑草稿</strong><pre>{{ JSON.stringify(conflict.draft,null,2) }}</pre></div></div><div class="conflict-actions"><button class="button subtle" @click="copyDraft"><FileJson :size="14"/> 复制草稿</button><button class="button subtle" @click="loadConflict"><RefreshCw :size="14"/> 加载服务器版本</button><button class="button danger-button" @click="overwriteConflict">保留草稿并重新校验</button></div></div>
         <form class="editor-form" @submit.prevent="submitForm">
           <fieldset class="editor-fieldset" :disabled="modalReadonly">

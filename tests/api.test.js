@@ -10,6 +10,7 @@ class MockD1 {
     this.db = new DatabaseSync(':memory:')
     this.db.exec('PRAGMA foreign_keys = ON')
     this.db.exec(readFileSync(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8'))
+    this.db.exec(readFileSync(new URL('../migrations/0002_heavy_units.sql', import.meta.url), 'utf8'))
   }
   prepare(sql) {
     const handle = this.db.prepare(sql)
@@ -51,6 +52,70 @@ async function call(env, method, path, body, email = 'captain@whu.edu.cn', origi
   return { status: res.status, data }
 }
 async function ready() { const env = fixture(); assert.equal((await call(env, 'GET', 'me')).status, 200); return env }
+
+test('heavy migration preserves records, budgets, memberships and custom unit details', () => {
+  const db = new DatabaseSync(':memory:')
+  db.exec('PRAGMA foreign_keys = ON')
+  db.exec(readFileSync(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8'))
+  db.exec(`INSERT INTO users(id,email,name,role,unit_ids) VALUES
+    ('a','a@example.com','A','leader','["hero","engineer","sentry"]'),
+    ('b','b@example.com','B','leader','["engineer"]');
+    UPDATE units SET budget=100,lead_id='a',description='custom hero',goal='goal A',stage='design' WHERE id='hero';
+    UPDATE units SET budget=200,lead_id='b',description='custom engineer',goal='goal B',stage='integration' WHERE id='engineer';
+    INSERT INTO tasks(id,unit_id,title,owner_id) VALUES('t','hero','task','a');
+    INSERT INTO milestones(id,unit_id,title) VALUES('m','engineer','milestone');
+    INSERT INTO risks(id,unit_id,title,owner_id) VALUES('r','engineer','risk','b');
+    INSERT INTO purchases(id,unit_id,name) VALUES('p','hero','part');`)
+  db.exec(readFileSync(new URL('../migrations/0002_heavy_units.sql', import.meta.url), 'utf8'))
+  const heavy = db.prepare("SELECT * FROM units WHERE id='heavy'").get()
+  assert.equal(heavy.name, '重装机器人')
+  assert.equal(heavy.budget, 300)
+  assert.equal(heavy.lead_id, 'a')
+  assert.match(heavy.description, /custom hero/)
+  assert.match(heavy.description, /custom engineer/)
+  assert.match(heavy.goal, /goal B/)
+  assert.match(heavy.stage, /design/)
+  assert.match(heavy.stage, /integration/)
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM units').get().n, 7)
+  for (const table of ['tasks', 'milestones', 'risks', 'purchases']) {
+    const row = db.prepare(`SELECT * FROM ${table}`).get()
+    assert.equal(row.unit_id, 'heavy')
+    assert.equal(row.version, 2)
+  }
+  assert.equal(db.prepare('SELECT owner_id FROM tasks').get().owner_id, 'a')
+  assert.deepEqual(JSON.parse(db.prepare("SELECT unit_ids FROM users WHERE id='a'").get().unit_ids), ['heavy', 'sentry'])
+  assert.deepEqual(JSON.parse(db.prepare("SELECT unit_ids FROM users WHERE id='b'").get().unit_ids), ['heavy'])
+  assert.deepEqual(db.prepare('PRAGMA foreign_key_check').all(), [])
+  db.close()
+})
+
+test('admin adds administrator and member accounts; duplicate emails and unauthorized creation fail', async () => {
+  const env = await ready()
+  const admin = await call(env, 'POST', 'users', { email: 'NewAdmin@example.com', name: 'Admin', role: 'admin', unit_ids: [] })
+  assert.equal(admin.status, 201)
+  assert.equal(admin.data.email, 'newadmin@example.com')
+  const member = await call(env, 'POST', 'users', { email: 'member@example.com', name: 'Member', role: 'member', unit_ids: ['heavy'] }, admin.data.email)
+  assert.equal(member.status, 201)
+  assert.deepEqual(member.data.unit_ids, ['heavy'])
+  assert.equal((await call(env, 'GET', 'me', undefined, member.data.email)).data.user.role, 'member')
+  assert.equal((await call(env, 'POST', 'users', { email: 'other@example.com', name: 'Other', role: 'admin', unit_ids: [] }, member.data.email)).status, 403)
+  const duplicate = await call(env, 'POST', 'users', { email: 'MEMBER@example.com', name: 'Duplicate', role: 'member', unit_ids: [] })
+  assert.equal(duplicate.status, 409)
+  assert.equal(duplicate.data.error.code, 'DUPLICATE_EMAIL')
+})
+
+test('legacy hero and engineer imports merge into heavy including budgets and metadata', async () => {
+  const env = await ready()
+  const old = { version: 2, members: [], tasks: [{ unit: 'hero', title: 'A' }, { unit: 'engineer', title: 'B' }],
+    milestones: [{ unit: 'engineer', title: 'M' }], risks: [{ unit: 'hero', title: 'R' }], purchases: [{ unit: 'engineer', name: 'P' }],
+    units: { hero: { budget: 100, description: 'A' }, engineer: { budget: 200, description: 'B' } } }
+  assert.equal((await call(env, 'POST', 'import', old)).status, 200)
+  const snapshot = (await call(env, 'GET', 'state')).data
+  for (const kind of ['tasks', 'milestones', 'risks', 'purchases']) assert.ok(snapshot[kind].every(row => row.unit_id === 'heavy'))
+  const heavy = snapshot.units.find(row => row.id === 'heavy')
+  assert.equal(heavy.budget, 300)
+  assert.equal(heavy.description, 'A\nB')
+})
 
 test('anonymous cannot spoof headers; local dev identity is restricted to localhost', async () => {
   const env = fixture()
@@ -100,10 +165,10 @@ test('production verifies signed Access JWT, issuer, audience, expiry, and rejec
   } finally { globalThis.fetch = oldFetch }
 })
 
-test('first admin bootstrap, 8 unit rows and no fake demo tasks', async () => {
+test('first admin bootstrap, 7 unit rows and no fake demo tasks', async () => {
   const env = await ready()
   const { data } = await call(env, 'GET', 'state')
-  assert.equal(data.units.length, 8)
+  assert.equal(data.units.length, 7)
   assert.equal(data.users.length, 1)
   assert.equal(data.users[0].role, 'admin')
   assert.equal(data.tasks.length, 0)
@@ -120,7 +185,7 @@ test('RBAC: leader writes assigned unit; member owns tasks; viewer read-only', a
   const task = await call(env, 'POST', 'tasks', { unit_id: 'sentry', title: '自瞄延时回归测试', owner_id: memberRes.data.id }, 'leader@whu.edu.cn')
   assert.equal(task.status, 201)
   assert.equal(task.data.version, 1)
-  assert.equal((await call(env, 'POST', 'tasks', { unit_id: 'hero', title: '不允许' }, 'leader@whu.edu.cn')).status, 403)
+  assert.equal((await call(env, 'POST', 'tasks', { unit_id: 'heavy', title: '不允许' }, 'leader@whu.edu.cn')).status, 403)
   assert.equal((await call(env, 'PATCH', `tasks/${task.data.id}`, { version: 1, status: 'doing' }, 'member@whu.edu.cn')).status, 200)
   assert.equal((await call(env, 'PATCH', `tasks/${task.data.id}`, { version: 2, owner_id: leaderRes.data.id }, 'member@whu.edu.cn')).status, 403)
   assert.equal((await call(env, 'PATCH', 'units/sentry', { version: 1, budget: 9000 }, 'member@whu.edu.cn')).status, 403)
@@ -151,7 +216,7 @@ test('optimistic locks: atomic revision match, 409 current payload, stale delete
 test('schema CRUD milestones risks purchases settings and 409', async () => {
   const env = await ready()
   const cases = [
-    ['milestones', { title: '第一次联调', unit_id: 'engineer', due_date: '2026-11-11', done: false }, { done: true }],
+    ['milestones', { title: '第一次联调', unit_id: 'heavy', due_date: '2026-11-11', done: false }, { done: true }],
     ['risks', { title: '回环带宽异常', unit_id: 'radar', level: 'critical' }, { status: 'watch' }],
     ['purchases', { name: '线束连接器', unit_id: 'sentry', quantity: 2, unit_price: 300 }, { quantity: 3 }]
   ]

@@ -7,7 +7,8 @@ import { verifyAccessToken, AccessAuthError } from './access-jwt.js'
  * Required for Workers Static Assets, which cannot use ctx.access.
  * Never trust unverified email headers or unverified JWT payloads.
  */
-const UNIT_IDS = new Set(['hero', 'engineer', 'infantry3', 'infantry4', 'aerial', 'sentry', 'dart', 'radar'])
+const UNIT_IDS = new Set(['heavy', 'infantry3', 'infantry4', 'aerial', 'sentry', 'dart', 'radar'])
+const legacyUnitId = id => ['hero', 'engineer'].includes(id) ? 'heavy' : id
 const ROLES = ['admin', 'leader', 'member', 'viewer']
 const timestamp = () => new Date().toISOString()
 const json = (data, status = 200, headers = {}) => new Response(JSON.stringify(data), {
@@ -331,7 +332,7 @@ async function importLegacy(db, actor, body) {
   if (counts.some(r => Number(r.results[0].n) > 0)) fail(409, 'DATA_EXISTS', '云端已有业务数据；为防止覆盖，请在空数据库中迁移')
   const stmt = []
   const imported = { tasks: [], milestones: [], risks: [], purchases: [] }
-  const unitOf = obj => sentryOnly ? 'sentry' : unitValue(obj.unit || 'sentry')
+  const unitOf = obj => sentryOnly ? 'sentry' : unitValue(legacyUnitId(obj.unit || 'sentry'))
   const labelOf = obj => text(memberMap[String(obj.owner)] || '', '导入负责人', 100)
   for (const raw of body.tasks) {
     if (!isRecord(raw)) fail(422,'INVALID_IMPORT','任务记录格式错误')
@@ -375,7 +376,19 @@ async function importLegacy(db, actor, body) {
     stmt.push(db.prepare('UPDATE settings SET team_name=?,season=?,team_budget=?,version=version+1 WHERE id=1').bind(teamName,season,teamBudget))
   }
   if (isRecord(body.units)) {
-    for (const [unitId, raw] of Object.entries(body.units)) {
+    const mergedUnits = {}
+    for (const [oldId, raw] of Object.entries(body.units)) {
+      const unitId = legacyUnitId(oldId)
+      if (!UNIT_IDS.has(unitId) || !isRecord(raw)) continue
+      const previous = mergedUnits[unitId]
+      mergedUnits[unitId] = previous ? {
+        budget: number(previous.budget ?? 0, '兵种预算') + number(raw.budget ?? 0, '兵种预算'),
+        stage: [previous.stage, raw.stage].filter(Boolean).join(' / '),
+        description: [previous.description, raw.description].filter(Boolean).join('\n'),
+        goal: [previous.goal, raw.goal].filter(Boolean).join('\n')
+      } : raw
+    }
+    for (const [unitId, raw] of Object.entries(mergedUnits)) {
       if (!UNIT_IDS.has(unitId) || !isRecord(raw)) continue
       stmt.push(db.prepare('UPDATE units SET budget=?,stage=?,description=?,goal=?,version=version+1 WHERE id=?')
         .bind(number(raw.budget??0,'兵种预算'),text(String(raw.stage||'待规划'),'阶段',80),text(String(raw.description||''),'简介',1600),text(String(raw.goal||''),'目标',600),unitId))
